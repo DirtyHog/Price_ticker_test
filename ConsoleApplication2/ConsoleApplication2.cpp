@@ -11,58 +11,31 @@
 #include <json/json.h>
 
 #define ILOSC_TEST 8
+#define CZAS_ODSWIEZANIA_CEN 10000               //Czas w ms
 
 //Testing testing
 
-clock_t                                 start, koniec;                              //Czas pobierania danych
-std::string                             url_crypto = "";
-std::string                             url_crypto_szczegolowe_dane = "https://api.binance.com/api/v3/ticker/24hr?symbols=%5B%22BTCUSDT%22,%22BNBUSDT%22%5D";
-int                                     ilosc_par_lista = 0;
-std::vector<std::string>                kryptowaluty_wszystkie;
-std::vector<std::string>                kryptowaluty_lista;
-std::vector<std::string>                kryptowaluty_lista_z_koncowkami;
-std::vector<std::vector<std::string>>   kryptowaluty_lista_szczegolowe_dane;
-std::vector<std::vector<std::string>>   kryptowaluty_aktualne_ceny;
-std::vector<std::vector<std::string>>   cale_dane;
-std::vector<std::string>                para;
-std::string                             dane_wejsciowe[ILOSC_TEST] = { "BTCUSDT","ETHUSDT","SOLUSDT","ADAUSDT","OPUSDT","ENSUSDT","PAXGUSDT","AAVEUSDT" };      //Testowy wektor
+clock_t                                         start, koniec, czas_pobrania;                               //Czas pobierania danych
+std::string                                     url_crypto;
+int                                             ilosc_par_lista = 0;                                        //ilosc par bez powtorzen
+int                                             ilosc_par_lista_szczegolowe = 0;                            //ilosc par dla szczegolowych danych
+std::vector<std::string>                        kryptowaluty_wszystkie;
+std::vector<std::string>                        kryptowaluty_lista;
+std::vector<std::string>                        kryptowaluty_lista_z_koncowkami;
+std::vector<std::vector<std::string>>           kryptowaluty_lista_szczegolowe_dane;
+std::vector<std::vector<std::string>>           kryptowaluty_aktualne_ceny;
+std::vector<std::vector<std::string>>           cale_dane;
+std::vector<std::string>                        para;
+std::string                                     dane_wejsciowe[ILOSC_TEST] = { "BTCUSDT","ETHUSDT","SOLUSDT","ADAUSDT","OPUSDT","ENSUSDT","PAXGUSDT","AAVEUSDT" };      //Testowy wektor
 
-void inicjuj()
-{
-    for (int j = 0; j < ILOSC_TEST; j++)
-    {
-        para.clear();
-        //std::cout << dane_wejsciowe[j] << "-->" << j << std::endl;
-        para.push_back(dane_wejsciowe[j]);
-        para.push_back("0.00");
-        cale_dane.push_back(para);
-    }
-}                                                                                           //Funkcja do testow                                                                       
-void stworz_url()                                                                           
-{
-    std::string url("https://api.binance.com/api/v3/ticker/price?symbols=[");
-    for (int i = 0; i < ILOSC_TEST; i++)
-    {
-        if (i > 0) { url = url + ","; }
-        url = url + "\"" + cale_dane[i][0] + "\"";
-    }
-    url_crypto = url + "]";
-}                                                                                           //Stworz url do pobierania aktualnych cen
-void stworz_url_szczegoly()
-{
-    std::string url("https://api.binance.com/api/v3/ticker/24hr?symbols=[");
-    for (int i = 0; i < ilosc_par_lista; i++)
-    {
-        if (i > 0) { url = url + ","; }
-        url = url + "\"" + kryptowaluty_lista_z_koncowkami[i] + "\"";
-    }
-    url_crypto_szczegolowe_dane = url + "]";
-}                                                                                           //Stworz url do pobierania wolumenu 24h/% itp
+void inicjuj();                                                                             //Funkcja do testow                                                                       
+void stworz_url();                                                                          //Stworz url do pobierania aktualnych cen
 bool pobierz_dane(std::string text);                                                        //Pobiera dane dla konkretnych wybranych crypto
 bool pobierz_dane_lista();                                                                  //Tylko raz na poczatku pobiera cala liste wszystkich crypto
-bool pobierz_dane_szczegolowe(std::string text);                                            //Tylko raz pobiera dla wszystkich krypto dane typu wolumen, 24h % zmian itp 
+bool pobierz_dane_szczegolowe();                                                            //Tylko raz pobiera dla wszystkich krypto dane typu wolumen, 24h % zmian itp 
 void porzadkuj_liste(std::vector<std::string> lista);                                       //Usun koncowki "USDT","BTC","ETH" itp i powtorzenia 
 bool sprawdz_powtorzenia(std::vector<std::string> lista1, std::string text, int ilosc_i);   //sprawdza powtorzenia na nowo tworzonej liscie
+void sortuj_lista_szczegolowe_dane(std::string filtr,bool tryb, int ilosc_par);             //sortuj macierz kryptowaluty_lista_szczegolowe_dane po filtrze zgodym z api binance [TRYB - true sortuje rosn¹co/false malej¹co]
 
 
 int main()
@@ -73,7 +46,7 @@ int main()
     inicjuj();
     stworz_url();
     std::cout << "Pobieram liste kryptowalut ...";
-    while (!czy_pobrano_liste) { czy_pobrano_liste = pobierz_dane_lista(); }
+    while (!czy_pobrano_liste) { czy_pobrano_liste = pobierz_dane_lista(); std::cout << ".";}
     kryptowaluty_lista = kryptowaluty_wszystkie;
     porzadkuj_liste(kryptowaluty_lista);
     std::sort(kryptowaluty_lista.begin(), kryptowaluty_lista.end());
@@ -93,33 +66,196 @@ int main()
         }
     */
     std::cout << "Pobieram szczegolowe dane ...";
-    stworz_url_szczegoly();
-    while (!czy_pobrano_szczegolowe_dane) { czy_pobrano_szczegolowe_dane = pobierz_dane_szczegolowe(url_crypto_szczegolowe_dane); }
+    //stworz_url_szczegoly();
+    //std::cout << "\n" << url_crypto_szczegolowe_dane << std::endl;
+    while (!czy_pobrano_szczegolowe_dane) { czy_pobrano_szczegolowe_dane = pobierz_dane_szczegolowe(); std::cout << "."; Sleep(1000); }          //1000ms opoznienia aby binance mogl odpowiedziec
     /*
-    for (int j = 0; j < ilosc_par_lista; j++)
+    std::cout << "ilosc pozycji: " << ilosc_par_lista_szczegolowe << std::endl;
+    for (int j = 0; j < ilosc_par_lista_szczegolowe; j++)
     {
-        for (int i = 0; i < 21; i++)
         {
             //TEST
-            std::cout << kryptowaluty_lista_szczegolowe_dane[j][i] << std::endl;
+            std::cout << kryptowaluty_lista_szczegolowe_dane[j][0] << std::endl;
+            std::cout << kryptowaluty_lista_szczegolowe_dane[j][2] << std::endl;
         }
     }
-    std::cout << url_crypto_szczegolowe_dane << std::endl;
+    */
+    sortuj_lista_szczegolowe_dane("priceChangePercent",false, ilosc_par_lista_szczegolowe);
+    /*
+    for (int j = 0; j < ilosc_par_lista_szczegolowe; j++)
+    {
+        //for (int i = 0; i < 16; i++)
+        {
+            //TEST
+            std::cout << kryptowaluty_lista_szczegolowe_dane[j][0] << std::endl;
+            std::cout << kryptowaluty_lista_szczegolowe_dane[j][2] << std::endl;
+            //i = i + 14;
+        }
+    }
     */
     std::cout << "  - ok !" << std::endl;
     //std::cout << "Ilosc kryptowalut: " << ilosc_par_lista << std::endl;
-    std::cout << "Pobieram aktualne ceny ...";
-    start = clock();
-    while (!czy_pobrano) { czy_pobrano = pobierz_dane(url_crypto); }
-    koniec = clock();
-    std::cout << "  - ok !" << std::endl;
-    //TEST
+    for (int j = 0; j < 1; j++)
+    {
+        if (j > 0) { Sleep(CZAS_ODSWIEZANIA_CEN - czas_pobrania); }
+        std::cout << "Pobieram aktualne ceny ...";
+        start = clock();
+        while (!czy_pobrano) { czy_pobrano = pobierz_dane(url_crypto); std::cout << ".";}
+        koniec = clock();
+        czas_pobrania = (koniec - start) * 1000 / CLOCKS_PER_SEC;
+        std::cout << "  - ok !" << std::endl;
+        //TEST
+        for (int i = 0; i < ILOSC_TEST; i++)
+        {
+            std::cout << kryptowaluty_aktualne_ceny[i][0] << " --> " << kryptowaluty_aktualne_ceny[i][1] << std::endl;
+            //std::cout << cale_dane[i][0] << " -> " << cale_dane[i][1] << std::endl;
+        }
+        std::cout << "Czas pobrania: " << czas_pobrania << "ms, odswiezenie cen za: " << CZAS_ODSWIEZANIA_CEN - czas_pobrania << "ms" << std::endl;
+        czy_pobrano = false;
+    }
+}
+
+void inicjuj()
+{
+    for (int j = 0; j < ILOSC_TEST; j++)
+    {
+        para.clear();
+        //std::cout << dane_wejsciowe[j] << "-->" << j << std::endl;
+        para.push_back(dane_wejsciowe[j]);
+        para.push_back("0.00");
+        cale_dane.push_back(para);
+    }
+}
+void stworz_url()
+{
+    std::string url("https://api.binance.com/api/v3/ticker/price?symbols=[");
     for (int i = 0; i < ILOSC_TEST; i++)
     {
-        std::cout << kryptowaluty_aktualne_ceny[i][0] << " --> " << kryptowaluty_aktualne_ceny[i][1] << std::endl;
-        //std::cout << cale_dane[i][0] << " -> " << cale_dane[i][1] << std::endl;
+        if (i > 0) { url = url + ","; }
+        url = url + "\"" + cale_dane[i][0] + "\"";
     }
-    std::cout << "Czas pobrania: " << (koniec - start)*1000 / CLOCKS_PER_SEC << "ms" << std::endl;
+    url_crypto = url + "]";
+}
+void sortuj_lista_szczegolowe_dane(std::string filtr, bool tryb, int ilosc_par)
+{
+    int licznik = 0;
+    std::string tymczasowy[21] = { "symbol" ,"priceChange" ,"priceChangePercent" ,"weightedAvgPrice",
+    "prevClosePrice" , "lastPrice" ,"lastQty","bidPrice","bidQty","askPrice","askQty","openPrice",
+    "highPrice" ,"lowPrice" ,"volume" ,"quoteVolume" ,"openTime" ,"closeTime" ,"firstId" ,"lastId","count" };
+    std::vector<std::string> tymczasowy1;
+    std::vector<double>      tymczasowy11;
+    std::vector<std::vector<std::string>> zapas;
+    for (int i = 0; i < 21; i++)                                                                                //21 - to stala wynikajaca z ilosci argumentow binance api
+    {
+        if (filtr == tymczasowy[i]) { licznik = i; i = 21;}
+    }
+    for (int i = 0; i < ilosc_par; i++)
+    {
+        if(licznik==0) { tymczasowy1.push_back(kryptowaluty_lista_szczegolowe_dane[i][licznik]); }       //inna zmienna dla zmiennej string inczaej dla double ||  Je¿eli "symbol" wtedy sortowanie stringow/ inaczej sortowanie liczb    
+        else { tymczasowy11.push_back(stod(kryptowaluty_lista_szczegolowe_dane[i][licznik])); }
+    }
+    if (tryb) 
+    { 
+        if (licznik == 0) { std::sort(tymczasowy1.begin(), tymczasowy1.end()); }
+        else { std::sort(tymczasowy11.begin(), tymczasowy11.end()); }
+    }
+    else 
+    { 
+        if (licznik == 0) { std::sort(tymczasowy1.begin(), tymczasowy1.end(), std::greater<std::string>()); }
+        else { std::sort(tymczasowy11.begin(), tymczasowy11.end(), std::greater<double>()); }
+    }
+    for (int i = 0; i < ilosc_par; i++)
+    {
+        for (int j = 0; j < ilosc_par; j++)
+        {
+            if (licznik == 0)
+            {
+                if (tymczasowy1[i] == kryptowaluty_lista_szczegolowe_dane[j][licznik])
+                {
+                    zapas.push_back(kryptowaluty_lista_szczegolowe_dane[j]);
+                    j = ilosc_par;
+                }
+            }
+            else
+            {
+                if (tymczasowy11[i] == stod(kryptowaluty_lista_szczegolowe_dane[j][licznik]))
+                {
+                    zapas.push_back(kryptowaluty_lista_szczegolowe_dane[j]);
+                    j = ilosc_par;
+                }
+            }
+        }
+    }
+    kryptowaluty_lista_szczegolowe_dane.clear();
+    kryptowaluty_lista_szczegolowe_dane = zapas;
+    tymczasowy1.clear();
+    zapas.clear();
+}
+void porzadkuj_liste(std::vector<std::string> lista)
+{
+    std::vector<std::string> tymczasowy;
+    int szukaj = 0;
+    int ilosc_par_nowe = 0;                     //ilosc par kryptowalut bez powtorzen
+    for (int i = 0; i < ilosc_par_lista; i++)   //usun "DOWN" "UP" "AUCTION" "BULL" "BEAR"
+    {
+        szukaj = lista[i].find("DOWN");
+        if (szukaj > 0) { lista[i] = ""; }
+        szukaj = lista[i].find("UP");
+        if (szukaj > 0) { lista[i] = ""; }
+        szukaj = lista[i].find("BULL");
+        if (szukaj > 0) { lista[i] = ""; }
+        szukaj = lista[i].find("BEAR");
+        if (szukaj > 0) { lista[i] = ""; }
+        szukaj = lista[i].find("AUCTION");
+        if (szukaj > 0) { lista[i] = ""; }
+        szukaj = lista[i].find("USDT");         //usun koncowke USDT
+        if (szukaj > 0)
+        {
+            lista[i].replace(szukaj, 4, "");
+            kryptowaluty_lista_z_koncowkami.push_back(kryptowaluty_lista[i]);           //zapas do pobierania wolumenu i innych
+            if (sprawdz_powtorzenia(tymczasowy, lista[i], ilosc_par_nowe))
+            {
+                tymczasowy.push_back(lista[i]);                                         //tymczasowy wektor do zapisu wszytskich krypto bez koncowek
+                ilosc_par_nowe++;
+            }
+        }
+        szukaj = lista[i].find("BTC");          //usun koncowke BTC
+        if (szukaj > 0)
+        {
+            lista[i].replace(szukaj, 3, "");
+            kryptowaluty_lista_z_koncowkami.push_back(kryptowaluty_lista[i]);
+            if (sprawdz_powtorzenia(tymczasowy, lista[i], ilosc_par_nowe))
+            {
+                tymczasowy.push_back(lista[i]);
+                ilosc_par_nowe++;
+            }
+        }
+        szukaj = lista[i].find("ETH");          //usun koncowke ETH
+        if (szukaj > 0)
+        {
+            lista[i].replace(szukaj, 3, "");
+            kryptowaluty_lista_z_koncowkami.push_back(kryptowaluty_lista[i]);
+            if (sprawdz_powtorzenia(tymczasowy, lista[i], ilosc_par_nowe))
+            {
+                tymczasowy.push_back(lista[i]);
+                ilosc_par_nowe++;
+            }
+        }
+    }
+    ilosc_par_lista = ilosc_par_nowe;
+    kryptowaluty_lista.clear();
+    kryptowaluty_lista = tymczasowy;
+    tymczasowy.clear();
+}
+bool sprawdz_powtorzenia(std::vector<std::string> lista1, std::string text, int ilosc_i)
+{
+    int zmienna = -1;
+    for (int i = 0; i < ilosc_i; i++)
+    {
+        zmienna = lista1[i].find(text);
+        if (zmienna >= 0) { return false; i = ilosc_i; }
+    }
+    return true;
 }
 
 namespace
@@ -135,10 +271,9 @@ namespace
         return totalBytes;
     }
 }
-
 bool pobierz_dane(std::string text)
 {
-    const std::string url=text;
+    const std::string url = text;
     CURL* curl = curl_easy_init();
 
     // Set remote URL.
@@ -243,9 +378,10 @@ bool pobierz_dane_lista()
         return false;
     }
 }
-bool pobierz_dane_szczegolowe(std::string text)
+bool pobierz_dane_szczegolowe()
 {
-    const std::string url = text;
+    ilosc_par_lista_szczegolowe = 0;
+    const std::string url = "https://api.binance.com/api/v3/ticker/24hr";
     CURL* curl = curl_easy_init();
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
@@ -286,6 +422,7 @@ bool pobierz_dane_szczegolowe(std::string text)
             tymczasowy.push_back(jsonData[i]["lastId"].asString());
             tymczasowy.push_back(jsonData[i]["count"].asString());
             kryptowaluty_lista_szczegolowe_dane.push_back(tymczasowy);
+            ilosc_par_lista_szczegolowe++;
             tymczasowy.clear();
         }
         return true;
@@ -294,70 +431,4 @@ bool pobierz_dane_szczegolowe(std::string text)
     {
         return false;
     }
-}
-void porzadkuj_liste(std::vector<std::string> lista)
-{
-    std::vector<std::string> tymczasowy;
-    int szukaj = 0;
-    int ilosc_par_nowe = 0;
-    for (int i = 0; i < ilosc_par_lista; i++)   //usun "DOWN" "UP" "AUCTION" "BULL" "BEAR"
-    {
-        szukaj = lista[i].find("DOWN");
-        if (szukaj > 0) { lista[i]=""; }
-        szukaj = lista[i].find("UP");
-        if (szukaj > 0) { lista[i]=""; }
-        szukaj = lista[i].find("BULL");
-        if (szukaj > 0) { lista[i]=""; }
-        szukaj = lista[i].find("BEAR");
-        if (szukaj > 0) { lista[i]=""; }
-        szukaj = lista[i].find("AUCTION");
-        if (szukaj > 0) { lista[i]=""; }
-        szukaj = lista[i].find("USDT");         //usun koncowke USDT
-        if (szukaj > 0) 
-        { 
-            lista[i].replace(szukaj, 4, ""); 
-            if (sprawdz_powtorzenia(tymczasowy, lista[i], ilosc_par_nowe))
-            {
-                tymczasowy.push_back(lista[i]);                                         //tymczasowy wektor do zapisu wszytskich krypto bez koncowek
-                kryptowaluty_lista_z_koncowkami.push_back(kryptowaluty_lista[i]);       //zapas do pobierania wolumenu i innych
-                ilosc_par_nowe++;
-            }
-        }
-        szukaj = lista[i].find("BTC");          //usun koncowke BTC
-        if (szukaj > 0) 
-        { 
-            lista[i].replace(szukaj, 3, "");
-            if (sprawdz_powtorzenia(tymczasowy, lista[i], ilosc_par_nowe))
-            {
-                tymczasowy.push_back(lista[i]);
-                kryptowaluty_lista_z_koncowkami.push_back(kryptowaluty_lista[i]);
-                ilosc_par_nowe++;
-            }
-        }
-        szukaj = lista[i].find("ETH");          //usun koncowke ETH
-        if (szukaj > 0) 
-        { 
-            lista[i].replace(szukaj, 3, ""); 
-            if (sprawdz_powtorzenia(tymczasowy, lista[i], ilosc_par_nowe))
-            {
-                tymczasowy.push_back(lista[i]);
-                kryptowaluty_lista_z_koncowkami.push_back(kryptowaluty_lista[i]);
-                ilosc_par_nowe++;
-            }
-        }
-    }
-    ilosc_par_lista = ilosc_par_nowe;
-    kryptowaluty_lista.clear();
-    kryptowaluty_lista = tymczasowy;
-    tymczasowy.clear();
-}
-bool sprawdz_powtorzenia(std::vector<std::string> lista1, std::string text, int ilosc_i)
-{
-    int zmienna = -1;
-    for (int i = 0; i < ilosc_i; i++)
-    {
-        zmienna = lista1[i].find(text);
-        if (zmienna >= 0) { return false; i = ilosc_i; }
-    }
-    return true;
 }
