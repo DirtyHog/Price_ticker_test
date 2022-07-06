@@ -1,6 +1,3 @@
-// ConsoleApplication2.cpp : This file contains the 'main' function. Program execution begins and ends there.
-//
-
 #include <cstdint>
 #include <iostream>
 #include <memory>
@@ -25,6 +22,7 @@ std::vector<std::string>                kryptowaluty_wszystkie;
 std::vector<std::string>                kryptowaluty_lista;
 std::vector<std::string>                kryptowaluty_lista_z_koncowkami;
 std::vector<std::vector<std::string>>   kryptowaluty_lista_szczegolowe_dane;
+std::vector<std::vector<std::string>>   kryptowaluty_aktualne_ceny;
 std::vector<std::vector<std::string>>   cale_dane;
 std::vector<std::string>                para;
 std::string                             dane_wejsciowe[ILOSC_TEST] = { "BTCUSDT","ETHUSDT","SOLUSDT","ADAUSDT","OPUSDT","ENSUSDT","PAXGUSDT","AAVEUSDT" };      //Testowy wektor
@@ -95,9 +93,10 @@ int main()
         }
     */
     std::cout << "Pobieram szczegolowe dane ...";
-    //stworz_url_szczegoly();
+    stworz_url_szczegoly();
     while (!czy_pobrano_szczegolowe_dane) { czy_pobrano_szczegolowe_dane = pobierz_dane_szczegolowe(url_crypto_szczegolowe_dane); }
-    for (int j = 0; j < 2; j++)
+    /*
+    for (int j = 0; j < ilosc_par_lista; j++)
     {
         for (int i = 0; i < 21; i++)
         {
@@ -106,23 +105,22 @@ int main()
         }
     }
     std::cout << url_crypto_szczegolowe_dane << std::endl;
-    std::cout << "Ilosc kryptowalut: " << ilosc_par_lista << std::endl;
+    */
+    std::cout << "  - ok !" << std::endl;
+    //std::cout << "Ilosc kryptowalut: " << ilosc_par_lista << std::endl;
+    std::cout << "Pobieram aktualne ceny ...";
     start = clock();
     while (!czy_pobrano) { czy_pobrano = pobierz_dane(url_crypto); }
     koniec = clock();
+    std::cout << "  - ok !" << std::endl;
+    //TEST
+    for (int i = 0; i < ILOSC_TEST; i++)
+    {
+        std::cout << kryptowaluty_aktualne_ceny[i][0] << " --> " << kryptowaluty_aktualne_ceny[i][1] << std::endl;
+        //std::cout << cale_dane[i][0] << " -> " << cale_dane[i][1] << std::endl;
+    }
     std::cout << "Czas pobrania: " << (koniec - start)*1000 / CLOCKS_PER_SEC << "ms" << std::endl;
 }
-
-// Run program: Ctrl + F5 or Debug > Start Without Debugging menu
-// Debug program: F5 or Debug > Start Debugging menu
-
-// Tips for Getting Started: 
-//   1. Use the Solution Explorer window to add/manage files
-//   2. Use the Team Explorer window to connect to source control
-//   3. Use the Output window to see build output and other messages
-//   4. Use the Error List window to view errors
-//   5. Go to Project > Add New Item to create new code files, or Project > Add Existing Item to add existing code files to the project
-//   6. In the future, to open this project again, go to File > Open > Project and select the .sln file
 
 namespace
 {
@@ -173,16 +171,17 @@ bool pobierz_dane(std::string text)
     curl_easy_cleanup(curl);
     Json::Value jsonData;
     Json::Reader jsonReader;
-
-    int ilosc = 0;
+    std::vector<std::string> tymczasowy;
+    kryptowaluty_aktualne_ceny.clear();
 
     if (jsonReader.parse(*httpData.get(), jsonData))
     {
-        //MessageBox(NULL, L"A", L"A", MB_OK);
         for (Json::Value::ArrayIndex i = 0; i != jsonData.size(); i++)
         {
-            std::cout << jsonData[i]["symbol"].asString() << "  -->  " << jsonData[i]["price"].asString() << std::endl;
-            ilosc++;
+            tymczasowy.push_back(jsonData[i]["symbol"].asString());
+            tymczasowy.push_back(jsonData[i]["price"].asString());
+            kryptowaluty_aktualne_ceny.push_back(tymczasowy);
+            tymczasowy.clear();
         }
         return true;
     }
@@ -248,34 +247,14 @@ bool pobierz_dane_szczegolowe(std::string text)
 {
     const std::string url = text;
     CURL* curl = curl_easy_init();
-
-    // Set remote URL.
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-
-    // Don't bother trying IPv6, which would increase DNS resolution time.
     curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
-
-    // Don't wait forever, time out after 1 seconds.
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 1);
-
-    // Follow HTTP redirects if necessary.
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-
-    // Hook up data handling function.
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, callback);
-
-    // Response information.
-    //long httpCode(0);
     std::unique_ptr<std::string> httpData(new std::string());
-
-    // Hook up data container (will be passed as the last parameter to the
-    // callback handling function).  Can be any pointer type, since it will
-    // internally be passed as a void pointer.
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, httpData.get());
-
-    // Run our HTTP GET command, capture the HTTP response code, and clean up.
     curl_easy_perform(curl);
-    //curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
     curl_easy_cleanup(curl);
     Json::Value jsonData;
     Json::Reader jsonReader;
@@ -283,7 +262,6 @@ bool pobierz_dane_szczegolowe(std::string text)
 
     if (jsonReader.parse(*httpData.get(), jsonData))
     {
-        //std::cout << jsonData.toStyledString() << std::endl;
         for (Json::Value::ArrayIndex i = 0; i != jsonData.size(); i++)
         {
             tymczasowy.push_back(jsonData[i]["symbol"].asString());
