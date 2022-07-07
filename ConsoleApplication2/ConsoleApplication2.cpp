@@ -6,12 +6,13 @@
 #include <time.h>
 #include <atlstr.h>
 #include <algorithm>    // std::sort
+#include <Windows.h>    //SYSTEMTIME
 
 #include <curl/curl.h>
 #include <json/json.h>
 
 #define ILOSC_TEST 8
-#define CZAS_ODSWIEZANIA_CEN 4000               //Czas w ms
+#define CZAS_ODSWIEZANIA_CEN 5000               //Czas w ms
 
 //Testing testing
 
@@ -25,6 +26,7 @@ std::string                                     url_crypto;                     
 std::vector<std::string>                        kryptowaluty_lista;                                         //lista krypto ktora bedzie do wyboru
 std::vector<std::vector<std::string>>           kryptowaluty_lista_szczegolowe_dane;                        //lista krypto z szczegolami typu (wolumen,%zmiana,cena,...)
 std::vector<std::vector<std::string>>           kryptowaluty_aktualne_ceny;                                 //macierz par cena-symbol do odswiezania cen
+SYSTEMTIME                                      time1;                                                      //czas pobrania danych
 
 
 void inicjuj();                                                                             //Funkcja do testow                                                                       
@@ -32,7 +34,7 @@ void stworz_url();                                                              
 void sortuj_lista_szczegolowe_dane(std::string filtr, bool tryb, int ilosc_par);            //sortuj macierz kryptowaluty_lista_szczegolowe_dane po filtrze zgodym z api binance [TRYB - true sortuje rosn¹co/false malej¹co]
 void stworz_liste();                                                                        //Tworzy liste samych symboli krypto i usuwa koncowki "USDT","BTC","ETH" itp i powtorzenia z wektora z danymi szczegolowymi
 bool sprawdz_powtorzenia(std::vector<std::string> lista1, std::string text, int ilosc_i);   //sprawdza powtorzenia na nowo tworzonej liscie
-bool pobierz_dane(std::string text);                                                        //Pobiera dane dla konkretnych wybranych crypto
+bool pobierz_dane(std::string text);                                                        //Pobiera dane dla konkretnych wybranych crypto - zmienna text do wybierania/usuwania par krypto
 bool pobierz_dane_szczegolowe();                                                            //Tylko raz pobiera dla wszystkich krypto dane typu wolumen, 24h % zmian itp 
 
 
@@ -47,12 +49,15 @@ int main()
     std::cout << "  - ok !" << std::endl;
     stworz_liste();
     std::sort(kryptowaluty_lista.begin(), kryptowaluty_lista.end());
-    for (int j = 0; j < 1; j++)
+    int ilosc_pobran = 0;
+    while(true)
     {
-        if (j > 0) { Sleep(CZAS_ODSWIEZANIA_CEN - czas_pobrania); }
+        if (ilosc_pobran > 0) { std::cout << "Pobieram szczegolowe dane ...  - ok !" << std::endl; }
+        ilosc_pobran++;
         std::cout << "Pobieram aktualne ceny ...";
         start = clock();
-        while (!czy_pobrano) { czy_pobrano = pobierz_dane(url_crypto); std::cout << ".";}
+        while (!czy_pobrano) { czy_pobrano = pobierz_dane(url_crypto);}
+        czy_pobrano = false;
         koniec = clock();
         czas_pobrania = (koniec - start) * 1000 / CLOCKS_PER_SEC;
         std::cout << "  - ok !" << std::endl;
@@ -60,8 +65,10 @@ int main()
         {
             std::cout << kryptowaluty_aktualne_ceny[i][0] << " --> " << kryptowaluty_aktualne_ceny[i][1] << std::endl;
         }
-        std::cout << "Czas pobrania: " << czas_pobrania << "ms, odswiezenie cen za: " << CZAS_ODSWIEZANIA_CEN - czas_pobrania << "ms" << std::endl;
-        czy_pobrano = false;
+        std::cout << "Czas pobrania: " << czas_pobrania << "ms, odswiezenie cen za: " << CZAS_ODSWIEZANIA_CEN - czas_pobrania << "ms" <<"("<<ilosc_pobran<<")"<< std::endl;
+        printf("Czas : %02d:%02d:%02d", time1.wHour, time1.wMinute, time1.wSecond);
+        Sleep(CZAS_ODSWIEZANIA_CEN - czas_pobrania);
+        system("cls");
     }
 }
 
@@ -247,6 +254,7 @@ bool pobierz_dane(std::string text)
         if (jsonReader.parse(*httpData.get(), jsonData))
         {
             kryptowaluty_aktualne_ceny.clear();
+            GetLocalTime(&time1);                                               //Czas pobrania danych
             for (Json::Value::ArrayIndex i = 0; i != jsonData.size(); i++)
             {
                 tymczasowy.push_back(jsonData[i]["symbol"].asString());
