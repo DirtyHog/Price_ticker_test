@@ -11,7 +11,7 @@
 #include <json/json.h>
 
 #define ILOSC_TEST 8
-#define CZAS_ODSWIEZANIA_CEN 10000               //Czas w ms
+#define CZAS_ODSWIEZANIA_CEN 4000               //Czas w ms
 
 //Testing testing
 
@@ -227,50 +227,36 @@ bool pobierz_dane(std::string text)
 {
     const std::string url = text;
     CURL* curl = curl_easy_init();
-
-    // Set remote URL.
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-
-    // Don't bother trying IPv6, which would increase DNS resolution time.
     curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
-
-    // Don't wait forever, time out after 1 seconds.
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 1);
-
-    // Follow HTTP redirects if necessary.
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 2);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-
-    // Hook up data handling function.
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, callback);
-
-    // Response information.
-    //long httpCode(0);
+    long httpCode(0);
     std::unique_ptr<std::string> httpData(new std::string());
-
-    // Hook up data container (will be passed as the last parameter to the
-    // callback handling function).  Can be any pointer type, since it will
-    // internally be passed as a void pointer.
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, callback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, httpData.get());
-
-    // Run our HTTP GET command, capture the HTTP response code, and clean up.
     curl_easy_perform(curl);
-    //curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
     curl_easy_cleanup(curl);
-    Json::Value jsonData;
-    Json::Reader jsonReader;
-    std::vector<std::string> tymczasowy;
-    kryptowaluty_aktualne_ceny.clear();
-
-    if (jsonReader.parse(*httpData.get(), jsonData))
+    if (httpCode == 200)
     {
-        for (Json::Value::ArrayIndex i = 0; i != jsonData.size(); i++)
+        Json::Value jsonData;
+        Json::Reader jsonReader;
+        std::vector<std::string>    tymczasowy;
+
+        if (jsonReader.parse(*httpData.get(), jsonData))
         {
-            tymczasowy.push_back(jsonData[i]["symbol"].asString());
-            tymczasowy.push_back(jsonData[i]["price"].asString());
-            kryptowaluty_aktualne_ceny.push_back(tymczasowy);
-            tymczasowy.clear();
+            kryptowaluty_aktualne_ceny.clear();
+            for (Json::Value::ArrayIndex i = 0; i != jsonData.size(); i++)
+            {
+                tymczasowy.push_back(jsonData[i]["symbol"].asString());
+                tymczasowy.push_back(jsonData[i]["price"].asString());
+                kryptowaluty_aktualne_ceny.push_back(tymczasowy);
+                tymczasowy.clear();
+            }
+            return true;
         }
-        return true;
+        else { return false; }  
     }
     else
     {
@@ -330,7 +316,7 @@ bool pobierz_dane_szczegolowe()
             }
             return true;
         }
-        return false;
+        else { return false; }
     }
     else
     {
